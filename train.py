@@ -130,15 +130,15 @@ class Trainer():
         # xcenter_b,ycenter_b是没加row或col的值 其范围在0~1之间  wh正常大小
         xcenter_a,ycenter_a,w_a,h_a=xywh_pred
         xcenter_b,ycenter_b,w_b,h_b=xywh_targ
-        w_anchor,hanchor=anchor_boxes
+        w_anchor,h_anchor=anchor_boxes
         
         # normal coordinates
         xcenter_a,ycenter_a=xcenter_a*self.grid_size,ycenter_a*self.grid_size
         xcenter_b,ycenter_b=(grid_row+xcenter_b)*self.grid_size,(grid_col+ycenter_b)*self.grid_size
         
         # border
-        xmin_a,xmax_a,ymin_a,ymax_a=xcenter_a-w_anchor/2,xcenter_a+w_anchor/2,ycenter_a-hanchor/2,ycenter_a+hanchor/2
-        xmin_b,xmax_b,ymin_b,ymax_b=xcenter_b-w_b/2,xcenter_b+w_b/2,ycenter_b-h_b/2,ycenter_b+h_b/2
+        xmin_a,xmax_a,ymin_a,ymax_a=xcenter_a-w_a/2,xcenter_a+w_a/2,ycenter_a-h_a/2,ycenter_a+h_a/2
+        xmin_b,xmax_b,ymin_b,ymax_b=xcenter_b-w_anchor/2,xcenter_b+w_anchor/2,ycenter_b-h_anchor/2,ycenter_b+h_anchor/2
         
         # IOU
         inter_xmin=max(xmin_a,xmin_b)
@@ -146,12 +146,12 @@ class Trainer():
         inter_ymin=max(ymin_a,ymin_b)
         inter_ymax=min(ymax_a,ymax_b)
         if inter_xmax<inter_xmin or inter_ymax<inter_ymin:
-            return 0
+            return torch.as_tensor(0).to(self.device)
 
         inter_area=(inter_xmax-inter_xmin)*(inter_ymax-inter_ymin) # 交集
-        union_area=w_anchor*hanchor+w_b*h_b-inter_area # 并集
+        union_area=w_a*h_a+w_anchor*h_anchor-inter_area # 并集
 
-        return inter_area/union_area # IOU
+        return torch.as_tensor(inter_area/union_area) # IOU
 
     def save_best_model(self):
         if len(self.losses)==1 or self.losses[-1]<self.losses[-2]: # 保存更优的model
