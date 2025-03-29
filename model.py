@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from torchvision.models import resnet50, ResNet50_Weights
+from torchvision.models import resnet50, ResNet50_Weights, resnet18, ResNet18_Weights
 
 def _initialize_weights(module):
     """Initialize the weights of convolutional, batch normalization, and linear layers"""
@@ -37,17 +37,14 @@ class Yolov2(nn.Module):
 
         self.anchors=anchors
 
-        _resnet50 = resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
-        self.backbone = nn.Sequential(*list(_resnet50.children())[:-2])
+        _resnet18 = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
+        self.backbone = nn.Sequential(*list(_resnet18.children())[:-2])
 
         self.head = nn.Sequential(
-            Conv_BN_LeakyReLU(2048, 1024, 3, 1),
-            Conv_BN_LeakyReLU(1024, 2048, 3, 1),
-            Conv_BN_LeakyReLU(2048, 1024, 3, 1),
-            Conv_BN_LeakyReLU(1024, 2048, 3, 1),
-            Conv_BN_LeakyReLU(2048, 1024, 3, 1),
-
-            Conv_BN_LeakyReLU(1024, 5*(5+C), 1)
+            Conv_BN_LeakyReLU(512, 1024, 3, 1),
+            Conv_BN_LeakyReLU(1024, 512, 3, 1),
+            Conv_BN_LeakyReLU(512, 1024, 3, 1),
+            Conv_BN_LeakyReLU(1024, 5*(5+C), 1),
         )
 
         if init_weight:
@@ -70,8 +67,8 @@ class Yolov2(nn.Module):
                         out[batch,row,col,i*(5+20):i*(5+20)+5]=torch.stack([x,y,w,h,c])
         return out
     
-def darknet19(num_classes: int = 1000, init_weight: bool = True) -> Yolov2:
-    return Yolov2(num_classes=num_classes, init_weight=init_weight)
+def darknet19(init_weight: bool = True) -> Yolov2:
+    return Yolov2(init_weight=init_weight)
 
 if __name__=='__main__':
     dummy_input = torch.randn(1, 3, 416, 416)
