@@ -21,6 +21,7 @@ class Trainer():
         self.LAMBDA_COORD=5
         self.LAMBDA_NOOBJ=0.5
         self.lr=3e-5
+        self.batch_size=2
         self.epochs=300
         self.number_anchors=5
 
@@ -33,7 +34,7 @@ class Trainer():
     def setup(self):
         # 加载数据集
         ds=YoloVOCDataset(self.IMG_SIZE, self.S, self.C)
-        self.dataloader=DataLoader(ds,batch_size=2,shuffle=True)
+        self.dataloader=DataLoader(ds,batch_size=self.batch_size,shuffle=True)
         all_boxes=ds.anchor_boxes
         self.anchor_boxes=kmeans_manual(np.array(all_boxes),self.number_anchors).tolist()
 
@@ -111,14 +112,16 @@ class Trainer():
                     all_ious=[iou_bbox1,iou_bbox2,iou_bbox3,iou_bbox4,iou_bbox5]
                     max_iou,max_iou_index=torch.max(torch.stack(all_ious),0)
                     # 计算最大iou的loss
-                    xywh=pred_grid[max_iou_index*(5+self.C):max_iou_index*(5+self.C)+4]
+                    xywh_pred=pred_grid[max_iou_index*(5+self.C):max_iou_index*(5+self.C)+4]
+                    wh_anchor=self.anchor_boxes[max_iou_index]
                     c_obj=pred_grid[max_iou_index*(5+self.C):max_iou_index*(5+self.C)+5][4]
                     iou_obj=max_iou
                     # 计算loss
-                    loss_xywh=(xywh[0]-row-target_grid[0])**2+(xywh[1]-col-target_grid[1])**2+(torch.sqrt(xywh[2])-torch.sqrt(target_grid[2]))**2+(torch.sqrt(xywh[3])-torch.sqrt(target_grid[3]))**2
+                    loss_xywh_pred=(xywh_pred[0]-row-target_grid[0])**2+(xywh_pred[1]-col-target_grid[1])**2+(torch.sqrt(xywh_pred[2])-torch.sqrt(target_grid[2]))**2+(torch.sqrt(xywh_pred[3])-torch.sqrt(target_grid[3]))**2
+                    loss_xywh_anchor=(xywh_pred[0]-row-target_grid[0])**2+(xywh_pred[1]-col-target_grid[1])**2+(torch.sqrt(torch.tensor(wh_anchor[0]))-torch.sqrt(target_grid[2]))**2+(torch.sqrt(torch.tensor(wh_anchor[1]))-torch.sqrt(target_grid[3]))**2
                     loss_c_obj=(iou_obj-c_obj)**2
                     loss_class=((pred_grid[max_iou_index*(5+self.C)+5:max_iou_index*(5+self.C)+5+self.C]-target_grid[max_iou_index*(5+self.C)+5:max_iou_index*(5+self.C)+5+self.C])**2).sum()
-                    loss=loss+loss_xywh*self.LAMBDA_COORD+loss_c_obj+loss_c_noobj*self.LAMBDA_NOOBJ+loss_class
+                    loss=loss+(loss_xywh_pred+loss_xywh_anchor)*self.LAMBDA_COORD+loss_c_obj+loss_c_noobj*self.LAMBDA_NOOBJ+loss_class
         return loss
 
     def compute_iou(self,grid_row,grid_col,xywh_pred,xywh_targ,anchor_boxes):
