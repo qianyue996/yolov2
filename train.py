@@ -97,42 +97,18 @@ class Trainer():
                     # IOU
                     for num_anchor in range(self.number_anchors):
                         if num_anchor==0:
-                            wh_anchor=self.anchor_boxes[num_anchor]
-                            loss_xywh_pred_anchor1=((xywh_pred[0]-row-target_grid[0])**2+
-                                                    (xywh_pred[1]-col-target_grid[1])**2+
-                                                    (torch.sqrt(xywh_pred[2])-torch.sqrt(torch.as_tensor(wh_anchor[0])))**2+
-                                                    (torch.sqrt(xywh_pred[3])-torch.sqrt(torch.as_tensor(wh_anchor[1])))**2)
-                            iou_bbox1=self.compute_iou(row,col,pred_grid[:4],target_grid[:4],self.anchor_boxes[num_anchor])
+                            iou_bbox1=self.compute_iou(row,col,pred_grid[:4],target_grid[:4],
+                                                       self.anchor_boxes[num_anchor])
                         if num_anchor==1:
-                            wh_anchor=self.anchor_boxes[num_anchor]
-                            loss_xywh_pred_anchor2=((xywh_pred[0]-row-target_grid[0])**2+
-                                                    (xywh_pred[1]-col-target_grid[1])**2+
-                                                    (torch.sqrt(xywh_pred[2])-torch.sqrt(torch.as_tensor(wh_anchor[0])))**2+
-                                                    (torch.sqrt(xywh_pred[3])-torch.sqrt(torch.as_tensor(wh_anchor[1])))**2)
                             iou_bbox2=self.compute_iou(row,col,pred_grid[num_anchor*(5+self.C):num_anchor*(5+self.C)+4],
                                                        target_grid[:4],self.anchor_boxes[num_anchor])
                         if num_anchor==2:
-                            wh_anchor=self.anchor_boxes[num_anchor]
-                            loss_xywh_pred_anchor3=((xywh_pred[0]-row-target_grid[0])**2+
-                                                    (xywh_pred[1]-col-target_grid[1])**2+
-                                                    (torch.sqrt(xywh_pred[2])-torch.sqrt(torch.as_tensor(wh_anchor[0])))**2+
-                                                    (torch.sqrt(xywh_pred[3])-torch.sqrt(torch.as_tensor(wh_anchor[1])))**2)
                             iou_bbox3=self.compute_iou(row,col,pred_grid[num_anchor*(5+self.C):num_anchor*(5+self.C)+4],
                                                        target_grid[:4],self.anchor_boxes[num_anchor])
                         if num_anchor==3:
-                            wh_anchor=self.anchor_boxes[num_anchor]
-                            loss_xywh_pred_anchor4=((xywh_pred[0]-row-target_grid[0])**2+
-                                                    (xywh_pred[1]-col-target_grid[1])**2+
-                                                    (torch.sqrt(xywh_pred[2])-torch.sqrt(torch.as_tensor(wh_anchor[0])))**2+
-                                                    (torch.sqrt(xywh_pred[3])-torch.sqrt(torch.as_tensor(wh_anchor[1])))**2)
                             iou_bbox4=self.compute_iou(row,col,pred_grid[num_anchor*(5+self.C):num_anchor*(5+self.C)+4],
                                                        target_grid[:4],self.anchor_boxes[num_anchor])
                         if num_anchor==4:
-                            wh_anchor=self.anchor_boxes[num_anchor]
-                            loss_xywh_pred_anchor5=((xywh_pred[0]-row-target_grid[0])**2+
-                                                    (xywh_pred[1]-col-target_grid[1])**2+
-                                                    (torch.sqrt(xywh_pred[2])-torch.sqrt(torch.as_tensor(wh_anchor[0])))**2+
-                                                    (torch.sqrt(xywh_pred[3])-torch.sqrt(torch.as_tensor(wh_anchor[1])))**2)
                             iou_bbox5=self.compute_iou(row,col,pred_grid[num_anchor*(5+self.C):num_anchor*(5+self.C)+4],
                                                        target_grid[:4],self.anchor_boxes[num_anchor])
                     # 取IOU大的预测框的x,y,w,h,c
@@ -143,13 +119,18 @@ class Trainer():
                     c_obj=pred_grid[max_iou_index*(5+self.C):max_iou_index*(5+self.C)+5][4]
                     iou_obj=max_iou
                     # 计算loss
+                    loss_xywh_pred_anchors=[]
+                    for num_anchor in range(self.number_anchors):
+                        wh_anchor=self.anchor_boxes[num_anchor]
+                        loss_xywh_pred_anchor=((xywh_pred[0]-row-target_grid[0])**2+
+                                                (xywh_pred[1]-col-target_grid[1])**2+
+                                                (torch.sqrt(xywh_pred[2])-torch.sqrt(torch.as_tensor(wh_anchor[0])))**2+
+                                                (torch.sqrt(xywh_pred[3])-torch.sqrt(torch.as_tensor(wh_anchor[1])))**2)
+                        loss_xywh_pred_anchors.append(loss_xywh_pred_anchor)
                     loss_xywh_pred_targ=((xywh_pred[0]-row-target_grid[0])**2+
                                          (xywh_pred[1]-col-target_grid[1])**2+
                                          (torch.sqrt(xywh_pred[2])-torch.sqrt(target_grid[2]))**2+
                                          (torch.sqrt(xywh_pred[3])-torch.sqrt(target_grid[3]))**2)
-                    loss_xywh_pred_anchors=(loss_xywh_pred_anchor1+loss_xywh_pred_anchor2+
-                                            loss_xywh_pred_anchor3+loss_xywh_pred_anchor4+
-                                            loss_xywh_pred_anchor5)
                     loss_c_obj=(iou_obj-c_obj)**2
                     loss_class=((pred_grid[max_iou_index*(5+self.C)+5:max_iou_index*(5+self.C)+5+self.C]-
                                  target_grid[max_iou_index*(5+self.C)+5:max_iou_index*(5+self.C)+5+self.C])**2).sum()
