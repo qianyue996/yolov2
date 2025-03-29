@@ -135,7 +135,12 @@ class Trainer():
                     loss_class=((pred_grid[max_iou_index*(5+self.C)+5:max_iou_index*(5+self.C)+5+self.C]-
                                  target_grid[max_iou_index*(5+self.C)+5:max_iou_index*(5+self.C)+5+self.C])**2).sum()
                     loss=(loss+
-                          (loss_xywh_pred_targ+loss_xywh_pred_anchors)*self.LAMBDA_COORD+loss_c_obj+
+                          loss_xywh_pred_targ*self.LAMBDA_COORD+loss_c_obj+
+                          loss_xywh_pred_anchors[0]*self.LAMBDA_COORD+loss_c_obj+
+                          loss_xywh_pred_anchors[1]*self.LAMBDA_COORD+loss_c_obj+
+                          loss_xywh_pred_anchors[2]*self.LAMBDA_COORD+loss_c_obj+
+                          loss_xywh_pred_anchors[3]*self.LAMBDA_COORD+loss_c_obj+
+                          loss_xywh_pred_anchors[4]*self.LAMBDA_COORD+loss_c_obj+
                           loss_c_noobj*self.LAMBDA_NOOBJ+loss_class)
         return loss
 
