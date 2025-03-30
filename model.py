@@ -39,7 +39,8 @@ class Yolov2(nn.Module):
         self.S = S
         self.C = C
 
-        self.anchors=torch.as_tensor(anchors)
+        anchors=torch.as_tensor(anchors)
+        self.register_buffer('anchors', anchors)
         self.num_anchors=len(anchors)
 
         _resnet18 = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
