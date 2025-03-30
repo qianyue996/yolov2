@@ -31,7 +31,7 @@ class Trainer():
 
     def setup(self):
         # 加载数据集
-        ds=YoloVOCDataset(self.IMG_SIZE, self.S, self.C)
+        ds=YoloVOCDataset(self.IMG_SIZE,self.S,self.C,self.number_anchors)
         self.dataloader=DataLoader(ds,batch_size=self.batch_size,shuffle=True)
         all_boxes=ds.anchor_boxes
         self.anchor_boxes=kmeans_manual(np.array(all_boxes),self.number_anchors).tolist()
@@ -89,9 +89,9 @@ class Trainer():
                 for col in range(self.S):
                     pred_grid=output[row,col]
                     target_grid=y[row,col]
-                    if not target_grid[4]>0: # no object in this grid
+                    if not target_grid[4]>0:  # no object in this grid
                         for num_anchor in range(self.number_anchors):
-                            loss_c_noobj=(pred_grid[num_anchor*(5+self.C)+5])**2# no object in grid,so target c is 0
+                            loss_c_noobj=torch.nn.BCELoss()(pred_grid[num_anchor*(5+self.C)+4],target_grid[4])  # no object in grid,so target c is 0
                             loss=loss+self.LAMBDA_NOOBJ*loss_c_noobj
                         continue
                     # IOU
@@ -131,17 +131,17 @@ class Trainer():
                                          (xywh_pred[1]-col-target_grid[1])**2+
                                          (torch.sqrt(xywh_pred[2])-torch.sqrt(target_grid[2]))**2+
                                          (torch.sqrt(xywh_pred[3])-torch.sqrt(target_grid[3]))**2)
-                    loss_c_obj=(iou_obj-c_obj)**2
+                    loss_c_obj=torch.nn.BCELoss()(c_obj,target_grid[4])
                     loss_class=((pred_grid[max_iou_index*(5+self.C)+5:max_iou_index*(5+self.C)+5+self.C]-
                                  target_grid[max_iou_index*(5+self.C)+5:max_iou_index*(5+self.C)+5+self.C])**2).sum()
                     loss=(loss+
-                          loss_xywh_pred_targ*self.LAMBDA_COORD+loss_c_obj+
-                          loss_xywh_pred_anchors[0]*self.LAMBDA_COORD+loss_c_obj+
-                          loss_xywh_pred_anchors[1]*self.LAMBDA_COORD+loss_c_obj+
-                          loss_xywh_pred_anchors[2]*self.LAMBDA_COORD+loss_c_obj+
-                          loss_xywh_pred_anchors[3]*self.LAMBDA_COORD+loss_c_obj+
-                          loss_xywh_pred_anchors[4]*self.LAMBDA_COORD+loss_c_obj+
-                          loss_c_noobj*self.LAMBDA_NOOBJ+loss_class)
+                          loss_xywh_pred_targ*self.LAMBDA_COORD+
+                          loss_xywh_pred_anchors[0]*self.LAMBDA_COORD+
+                          loss_xywh_pred_anchors[1]*self.LAMBDA_COORD+
+                          loss_xywh_pred_anchors[2]*self.LAMBDA_COORD+
+                          loss_xywh_pred_anchors[3]*self.LAMBDA_COORD+
+                          loss_xywh_pred_anchors[4]*self.LAMBDA_COORD+
+                          +loss_c_obj+loss_class)
         return loss
 
     def compute_iou(self,grid_row,grid_col,xywh_pred,xywh_targ,anchor_boxes):

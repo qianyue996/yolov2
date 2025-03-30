@@ -6,12 +6,13 @@ from tqdm import tqdm
 from torch.utils.data.dataloader import DataLoader
 
 class YoloVOCDataset(Dataset):
-    def __init__(self, IMG_SIZE=416, S=13, C=20, image_set='train'):
+    def __init__(self, IMG_SIZE=416,S=13,C=20,number_anchors=5,image_set='train'):
         super().__init__()
         # ------------------- Basic parameters -------------------
         self.IMG_SIZE=IMG_SIZE
         self.S=S
         self.C=C
+        self.number_anchors=number_anchors
         # ------------------- Basic parameters -------------------
         self.voc_ds=VOCDetection(root='data',year='2012',image_set='train',download=False)
         classdict=set()
@@ -54,10 +55,9 @@ class YoloVOCDataset(Dataset):
             width,height=width*x_scale,height*y_scale
             
             # targets
-            for i in range(5):
-                y[grid_i,grid_j,i*(5+self.C):i*(5+self.C)+5]=torch.tensor([xcenter,ycenter,width,height,1])   # x,y,w,h,c
-                # y[grid_i,grid_j,i*(5+self.C)+5:i*(5+self.C)+25]=torch.zeros(20)
-                y[grid_i,grid_j,i*(5+self.C)+5+classid]=1
+            for num_anchor in range(self.number_anchors):
+                y[grid_i,grid_j,num_anchor*(5+self.C):num_anchor*(5+self.C)+5]=torch.as_tensor([xcenter,ycenter,width,height,1])   # x,y,w,h,c
+                y[grid_i,grid_j,num_anchor*(5+self.C)+5+classid]=1
         return x,y # ((3,416,416),(13,13,125))
     
     def __len__(self):

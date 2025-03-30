@@ -30,12 +30,16 @@ class Conv_BN_LeakyReLU(nn.Module):
         return self.convs(x)
 
 class Yolov2(nn.Module):
-    def __init__(self, S: int=13, C: int=20, anchors: list=[], init_weight: bool = True) -> None:
+    def __init__(self, S: int=13, C: int=20, anchors: list=[[1,1],
+                                                            [2,2],
+                                                            [3,3],
+                                                            [4,4],
+                                                            [5,5]], init_weight: bool = True) -> None:
         super().__init__()
         self.S = S
         self.C = C
 
-        self.anchors=anchors
+        self.anchors=torch.as_tensor(anchors)
 
         _resnet18 = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
         self.backbone = nn.Sequential(*list(_resnet18.children())[:-2])
@@ -58,13 +62,13 @@ class Yolov2(nn.Module):
             for row in range(self.S):
                 for col in range(self.S):
                     for i in range(len(self.anchors)):
-                        xywhc=out[batch,row,col,i*(5+20):i*(5+20)+5].view(-1)
+                        xywhc=out[batch,row,col,i*(5+self.C):i*(5+self.C)+5].view(-1)
                         x=torch.sigmoid(xywhc[0])+row
                         y=torch.sigmoid(xywhc[1])+col
                         w=torch.exp(xywhc[2])*self.anchors[i][0]
                         h=torch.exp(xywhc[3])*self.anchors[i][1]
                         c=torch.sigmoid(xywhc[4])
-                        out[batch,row,col,i*(5+20):i*(5+20)+5]=torch.stack([x,y,w,h,c])
+                        out[batch,row,col,i*(5+self.C):i*(5+self.C)+5]=torch.stack([x,y,w,h,c])
         return out
     
 def darknet19(init_weight: bool = True) -> Yolov2:
