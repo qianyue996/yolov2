@@ -22,6 +22,7 @@ class Trainer():
         self.LAMBDA_NOOBJ=0.5
         self.lr=3e-5
         self.batch_size=2
+        self.start_epoch=0
         self.epochs=300
         self.number_anchors=5
 
@@ -46,19 +47,16 @@ class Trainer():
             pass
         if self.checkpoint:
             self.model.load_state_dict(self.checkpoint['model'])
-        if self.checkpoint:    
             self.optimizer.load_state_dict(self.checkpoint['optimizer'])
+            self.start_epoch = self.checkpoint['epoch'] + 1
 
         # tensorboard
         self.writer=SummaryWriter(f'runs/{time.strftime("%Y-%m-%d-%H-%M-%S",time.localtime())}')
 
-        for param in self.model.backbone.parameters():
-            param.requires_grad = False
-
         self.model.train()
 
     def train(self):
-        for epoch in range(self.epochs):
+        for epoch in range(self.start_epoch,self.epochs):
             batch_avg_loss=0
             with tqdm(self.dataloader, disable=False) as bar:
                 for batch_x,batch_y in bar:
@@ -77,7 +75,7 @@ class Trainer():
             tqdm.write(f"本epoch平均损失为: {batch_avg_loss}")
             self.writer.add_scalar('epoch_loss',batch_avg_loss,epoch)
             self.losses.append(batch_avg_loss)
-            self.save_best_model()
+            self.save_best_model(epoch=epoch)
 
     def compute_loss(self,loss,batch_x,batch_y,batch_output):
         for i in range(len(batch_x)):
@@ -92,7 +90,7 @@ class Trainer():
                     if not target_grid[4]>0:  # no object in this grid
                         for num_anchor in range(self.number_anchors):
                             loss_c_noobj=torch.nn.BCELoss()(pred_grid[num_anchor*(5+self.C)+4],target_grid[4])  # no object in grid,so target c is 0
-                            loss=loss+self.LAMBDA_NOOBJ*loss_c_noobj
+                            loss=loss+loss_c_noobj
                         continue
                     # IOU
                     for num_anchor in range(self.number_anchors):
@@ -173,10 +171,14 @@ class Trainer():
 
         return torch.as_tensor(inter_area/union_area) # IOU
 
-    def save_best_model(self):
+    def save_best_model(self,epoch):
         if len(self.losses)==1 or self.losses[-1]<self.losses[-2]: # 保存更优的model
-            torch.save({'model':self.model.state_dict(),
-                        'optimizer':self.optimizer.state_dict()},'.checkpoint.pth')
+            checkpoint={
+                'model':self.model.state_dict(),
+                'optimizer':self.optimizer.state_dict(),
+                'epoch':epoch
+            }
+            torch.save(checkpoint,'.checkpoint.pth')
             os.replace('.checkpoint.pth','checkpoint.pth')
 
         EARLY_STOP_PATIENCE=5   # 早停忍耐度

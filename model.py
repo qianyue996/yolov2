@@ -45,7 +45,9 @@ class Yolov2(nn.Module):
 
         _resnet18 = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
         self.backbone = nn.Sequential(*list(_resnet18.children())[:-2])
-
+        for param in self.model.backbone.parameters():
+            param.requires_grad = False
+            
         self.head = nn.Sequential(
             Conv_BN_LeakyReLU(512, 1024, 3, 1),
             Conv_BN_LeakyReLU(1024, 512, 3, 1),
@@ -64,15 +66,15 @@ class Yolov2(nn.Module):
         pred = out[..., :5]
         grid_x = torch.arange(self.S, device=out.device).view(1, self.S, 1, 1)  # 对应 row（Y）
         grid_y = torch.arange(self.S, device=out.device).view(1, 1, self.S, 1)  # 对应 col（X）
-        # ----------------------------------------------------------------------#
+        # ---------------------------------------------------------------------- #
         x = torch.sigmoid(pred[..., 0]) + grid_x
         y = torch.sigmoid(pred[..., 1]) + grid_y
-        anchor_w = self.anchors[:, 0].view(1, 1, 1, self.num_anchors).to(out.device)  # shape: (1,1,1,A)
-        anchor_h = self.anchors[:, 1].view(1, 1, 1, self.num_anchors).to(out.device)  # shape: (1,1,1,A)
+        anchor_w = self.anchors[:, 0].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
+        anchor_h = self.anchors[:, 1].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
         w = torch.exp(pred[..., 2]) * anchor_w
         h = torch.exp(pred[..., 3]) * anchor_h
         c = torch.sigmoid(pred[..., 4])
-        # ----------------------------------------------------------------------#
+        # ---------------------------------------------------------------------- #
         # 将变换后的5个数合并回去，得到 shape (B, S, S, A, 5)
         transformed = torch.stack([x, y, w, h, c], dim=-1)
         out[..., :5] = transformed
