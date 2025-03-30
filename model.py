@@ -66,8 +66,8 @@ class Yolov2(nn.Module):
         # ----------------------------------------------------------------------#
         x = torch.sigmoid(pred[..., 0]) + grid_x
         y = torch.sigmoid(pred[..., 1]) + grid_y
-        anchor_w = self.anchors[:, 0].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
-        anchor_h = self.anchors[:, 1].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
+        anchor_w = self.anchors[:, 0].view(1, 1, 1, self.num_anchors).to(out.device)  # shape: (1,1,1,A)
+        anchor_h = self.anchors[:, 1].view(1, 1, 1, self.num_anchors).to(out.device)  # shape: (1,1,1,A)
         w = torch.exp(pred[..., 2]) * anchor_w
         h = torch.exp(pred[..., 3]) * anchor_h
         c = torch.sigmoid(pred[..., 4])
