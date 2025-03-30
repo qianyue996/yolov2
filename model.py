@@ -40,6 +40,7 @@ class Yolov2(nn.Module):
         self.C = C
 
         self.anchors=torch.as_tensor(anchors)
+        self.num_anchors=len(anchors)
 
         _resnet18 = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
         self.backbone = nn.Sequential(*list(_resnet18.children())[:-2])
@@ -57,19 +58,24 @@ class Yolov2(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.backbone(x)
         out = self.head(x)
-        out = out.view(-1,self.S,self.S,5*(5+self.C))
-        for batch in range(len(out)):
-            for row in range(self.S):
-                for col in range(self.S):
-                    for i in range(len(self.anchors)):
-                        xywhc=out[batch,row,col,i*(5+self.C):i*(5+self.C)+5].view(-1)
-                        x=torch.sigmoid(xywhc[0])+row
-                        y=torch.sigmoid(xywhc[1])+col
-                        w=torch.exp(xywhc[2])*self.anchors[i][0]
-                        h=torch.exp(xywhc[3])*self.anchors[i][1]
-                        c=torch.sigmoid(xywhc[4])
-                        out[batch,row,col,i*(5+self.C):i*(5+self.C)+5]=torch.stack([x,y,w,h,c])
-        return out
+        # 将 out reshape 为 (B, S, S, A, 5+C)
+        out = out.view(len(x), self.S, self.S, self.num_anchors, 5 + self.C)
+        pred = out[..., :5]
+        grid_x = torch.arange(self.S, device=out.device).view(1, self.S, 1, 1)  # 对应 row（Y）
+        grid_y = torch.arange(self.S, device=out.device).view(1, 1, self.S, 1)  # 对应 col（X）
+        # ----------------------------------------------------------------------#
+        x = torch.sigmoid(pred[..., 0]) + grid_x
+        y = torch.sigmoid(pred[..., 1]) + grid_y
+        anchor_w = self.anchors[:, 0].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
+        anchor_h = self.anchors[:, 1].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
+        w = torch.exp(pred[..., 2]) * anchor_w
+        h = torch.exp(pred[..., 3]) * anchor_h
+        c = torch.sigmoid(pred[..., 4])
+        # ----------------------------------------------------------------------#
+        # 将变换后的5个数合并回去，得到 shape (B, S, S, A, 5)
+        transformed = torch.stack([x, y, w, h, c], dim=-1)
+        out[..., :5] = transformed
+        return out.view(-1, self.S, self.S, self.num_anchors * (5 + self.C))
     
 def darknet19(init_weight: bool = True) -> Yolov2:
     return Yolov2(init_weight=init_weight)
