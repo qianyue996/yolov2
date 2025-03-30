@@ -1,9 +1,9 @@
 import cv2 as cv
 import numpy as np
 
-class Yolov2Draw():
-    def __init__(self,row,col):
-        super().__init__()
-        pass
-    def __call__(self):
-        pass
+def draw():
+    cv.rectangle(self.img,(int(xmin),int(ymin)),(int(xmax),int(ymax)),color=(0,0,255))
+    cv.addText(self.img,
+                self.objname,
+                (int(xmin+5),int(ymax+5)),
+                color=(0,0,255))

@@ -4,12 +4,11 @@ import torch
 import time
 from torch.utils.tensorboard import SummaryWriter
 import os
+import sys
 from tqdm import tqdm
-import numpy as np
 
 from dataset import YoloVOCDataset
 from model import Yolov2
-from kmeans_manual import kmeans_manual
 
 class Trainer():
     def __init__(self):
@@ -21,7 +20,7 @@ class Trainer():
         self.LAMBDA_COORD=5
         self.LAMBDA_NOOBJ=0.5
         self.lr=3e-5
-        self.batch_size=2
+        self.batch_size=128
         self.start_epoch=0
         self.epochs=300
         self.number_anchors=5
@@ -34,11 +33,12 @@ class Trainer():
         # 加载数据集
         ds=YoloVOCDataset(self.IMG_SIZE,self.S,self.C,self.number_anchors)
         self.dataloader=DataLoader(ds,batch_size=self.batch_size,shuffle=True)
-        all_boxes=ds.anchor_boxes
-        self.anchor_boxes=kmeans_manual(np.array(all_boxes),self.number_anchors).tolist()
-
+        self.anchor_boxes=ds.anchor_boxes
+        # 模型初始化
         self.model=Yolov2(self.S,self.C,self.anchor_boxes).to(self.device)
         self.optimizer=optim.Adam([param for param in self.model.parameters() if param.requires_grad],lr=self.lr)
+        for param in self.model.backbone.parameters():
+            param.requires_grad = False
 
         # 尝试从上次训练结束点开始
         try:
@@ -190,7 +190,7 @@ class Trainer():
                     break
                 if early_stop:
                     print(f'early stop, final loss={self.losses[-1]}')
-                    break
+                    sys.exit()
     
 
 if __name__ == '__main__':

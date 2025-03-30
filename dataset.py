@@ -4,6 +4,9 @@ import torch
 from torchvision.transforms import ToTensor
 from tqdm import tqdm
 from torch.utils.data.dataloader import DataLoader
+import numpy as np
+
+from kmeans_manual import kmeans_manual
 
 class YoloVOCDataset(Dataset):
     def __init__(self, IMG_SIZE=416,S=13,C=20,number_anchors=5,image_set='train'):
@@ -26,6 +29,7 @@ class YoloVOCDataset(Dataset):
                 h=ymax-ymin
                 self.anchor_boxes.append([w,h])
                 names=sorted(list(classdict))
+        self.anchor_boxes=kmeans_manual(np.array(self.anchor_boxes),self.number_anchors).tolist()
         self.id2name={i:c for i,c in enumerate(names)}
         self.name2id={c:i for i,c in self.id2name.items()}
     

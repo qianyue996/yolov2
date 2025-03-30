@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from torch.nn import functional as F
 from torchvision.models import resnet50, ResNet50_Weights, resnet18, ResNet18_Weights
 
 def _initialize_weights(module):
@@ -45,9 +44,7 @@ class Yolov2(nn.Module):
 
         _resnet18 = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
         self.backbone = nn.Sequential(*list(_resnet18.children())[:-2])
-        for param in self.model.backbone.parameters():
-            param.requires_grad = False
-            
+
         self.head = nn.Sequential(
             Conv_BN_LeakyReLU(512, 1024, 3, 1),
             Conv_BN_LeakyReLU(1024, 512, 3, 1),
