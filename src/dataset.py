@@ -6,7 +6,7 @@ from tqdm import tqdm
 from torch.utils.data.dataloader import DataLoader
 import numpy as np
 
-from kmeans_manual import kmeans_manual
+from src.kmeans_manual import kmeans_manual
 
 class YoloVOCDataset(Dataset):
     def __init__(self, IMG_SIZE=416,S=13,C=20,number_anchors=5,image_set='train'):

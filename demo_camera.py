@@ -2,8 +2,8 @@ import cv2 as cv
 import torch
 from torchvision.transforms import ToTensor
 
-from model import Yolov2
-from dataset import YoloVOCDataset
+from src.model import Yolov2
+from src.dataset import YoloVOCDataset
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
 cap = cv.VideoCapture(0)

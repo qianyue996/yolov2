@@ -7,8 +7,8 @@ import os
 import sys
 from tqdm import tqdm
 
-from dataset import YoloVOCDataset
-from model import Yolov2
+from src.dataset import YoloVOCDataset
+from src.model import Yolov2
 
 class Trainer():
     def __init__(self):
