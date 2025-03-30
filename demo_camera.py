@@ -2,7 +2,6 @@ import cv2 as cv
 import torch
 from torchvision.transforms import ToTensor
 
-from utils.draw import draw
 from model import Yolov2
 from dataset import YoloVOCDataset
 
