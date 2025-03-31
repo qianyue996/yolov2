@@ -39,10 +39,10 @@ class Trainer():
         self.optimizer=optim.Adam([param for param in self.model.parameters() if param.requires_grad],lr=self.lr)
 
         # 尝试从上次训练结束点开始
-        # try:
-        #     self.checkpoint=torch.load('checkpoint.pth')
-        # except Exception as e:
-        #     pass
+        try:
+            self.checkpoint=torch.load('checkpoint.pth')
+        except Exception as e:
+            pass
         if self.checkpoint:
             self.model.load_state_dict(self.checkpoint['model'])
             self.optimizer.load_state_dict(self.checkpoint['optimizer'])
@@ -77,6 +77,9 @@ class Trainer():
             self.save_best_model(epoch=epoch)
 
     def compute_loss(self,batch,batch_y,batch_output):
+        batch_output[...,0]=torch.sigmoid(batch_output[...,0])
+        batch_output[...,1]=torch.sigmoid(batch_output[...,1])
+        batch_output[...,4]=torch.sigmoid(batch_output[...,4])
         # no object's grid
         noobj_mask=batch_y[...,4]==0
         noobj_loss=((batch_output[...,4][noobj_mask]-batch_y[...,4][noobj_mask])**2).sum()

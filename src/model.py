@@ -67,10 +67,10 @@ class Yolov2Network(nn.Module):
         # anchor_h = self.anchors[:, 1].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
         # w = torch.exp(pred[..., 2]) * anchor_w
         # h = torch.exp(pred[..., 3]) * anchor_h
-        c = torch.sigmoid(out[..., 4])
+        # c = torch.sigmoid(out[..., 4])
         # # ---------------------------------------------------------------------- #
         # # 将变换后的5个数合并回去，得到 shape (B, S, S, A, 5)
-        out[...,4]=c
+        # out[...,4]=c
         return out # (B, S, S, 5, 4+1+C)
     
 def yolov2network(init_weight: bool = True) -> Yolov2Network:
