@@ -42,7 +42,7 @@ class YoloVOCDataset(Dataset):
         
         scaled_img=img.resize((self.IMG_SIZE,self.IMG_SIZE))
         x=ToTensor()(scaled_img)
-        y=torch.zeros(self.S,self.S,5*(5+self.C))
+        y=torch.zeros(self.S,self.S,self.number_anchors,4+1+self.C)
         
         for obj in label['annotation']['object']:
             box=obj['bndbox']
@@ -56,13 +56,13 @@ class YoloVOCDataset(Dataset):
             
             # yolo coordinates
             xcenter,ycenter=xcenter%grid_size/grid_size,ycenter%grid_size/grid_size
-            width,height=width*x_scale,height*y_scale
+            width,height=width/self.IMG_SIZE,height/self.IMG_SIZE
             
             # targets
-            for num_anchor in range(self.number_anchors):
-                y[grid_i,grid_j,num_anchor*(5+self.C):num_anchor*(5+self.C)+5]=torch.as_tensor([xcenter,ycenter,width,height,1])   # x,y,w,h,c
-                y[grid_i,grid_j,num_anchor*(5+self.C)+5+classid]=1
-        return x,y # ((3,416,416),(13,13,125))
+            y[grid_i,grid_j,:,:5]=torch.as_tensor([xcenter,ycenter,width,height,1])  # x,y,w,h,c
+            y[grid_i,grid_j,:,4]=1
+            y[grid_i,grid_j,:,5+classid]=1
+        return x,y # ((3,416,416),(13,13,5,25))
     
     def __len__(self):
         return len(self.voc_ds)

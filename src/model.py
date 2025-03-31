@@ -29,7 +29,7 @@ class Conv_BN_LeakyReLU(nn.Module):
         return self.convs(x)
 
 class Yolov2Network(nn.Module):
-    def __init__(self, S: int=7, C: int=20, anchors=torch.randn((5,2)), init_weight: bool = True) -> None:
+    def __init__(self, S: int=13, C: int=20, anchors=torch.randn((5,2)), init_weight: bool = True) -> None:
         super().__init__()
         self.S = S
         self.C = C
@@ -38,9 +38,9 @@ class Yolov2Network(nn.Module):
         _resnet18 = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
         self.backbone = nn.Sequential(*list(_resnet18.children())[:-2])
         self.head = nn.Sequential(
-            nn.Conv2d(512,1024,3),
-            nn.Conv2d(1024,1024,3),
-            nn.Conv2d(1024,1024,3),
+            nn.Conv2d(512,1024,3,1,1),
+            nn.Conv2d(1024,1024,3,1,1),
+            nn.Conv2d(1024,1024,3,1,1),
             nn.Conv2d(1024,self.num_anchors*(5+self.C),1),
         )
 
@@ -55,25 +55,23 @@ class Yolov2Network(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.backbone(x)
-        out = self.head(x) # (B S S A*(5+C))
-        # 将 out reshape 为 (B, S, S, A, 5+C)
-        out = out.view(len(x), self.S, self.S, self.num_anchors, 5 + self.C)
-        pred = out[..., :5]
-        grid_x = torch.arange(self.S, device=out.device).view(1, self.S, 1, 1)  # 对应 row（X）
-        grid_y = torch.arange(self.S, device=out.device).view(1, 1, self.S, 1)  # 对应 col（Y）
-        # ---------------------------------------------------------------------- #
-        x = torch.sigmoid(pred[..., 0]) + grid_x
-        y = torch.sigmoid(pred[..., 1]) + grid_y
-        anchor_w = self.anchors[:, 0].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
-        anchor_h = self.anchors[:, 1].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
-        w = torch.exp(pred[..., 2]) * anchor_w
-        h = torch.exp(pred[..., 3]) * anchor_h
-        c = torch.sigmoid(pred[..., 4])
-        # ---------------------------------------------------------------------- #
-        # 将变换后的5个数合并回去，得到 shape (B, S, S, A, 5)
-        transformed = torch.stack([x, y, w, h, c], dim=-1)
-        out[..., :5] = transformed
-        return out.view(-1, self.S, self.S, self.num_anchors * (5 + self.C))
+        out = self.head(x)
+        out=out.view(len(x), self.S, self.S, self.num_anchors, 5 + self.C)
+        # pred = out[..., :5]
+        # grid_x = torch.arange(self.S, device=out.device).view(1, self.S, 1, 1)  # 对应 row（X）
+        # grid_y = torch.arange(self.S, device=out.device).view(1, 1, self.S, 1)  # 对应 col（Y）
+        # # ---------------------------------------------------------------------- #
+        # x = torch.sigmoid(pred[..., 0]) + grid_x
+        # y = torch.sigmoid(pred[..., 1]) + grid_y
+        # anchor_w = self.anchors[:, 0].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
+        # anchor_h = self.anchors[:, 1].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
+        # w = torch.exp(pred[..., 2]) * anchor_w
+        # h = torch.exp(pred[..., 3]) * anchor_h
+        c = torch.sigmoid(out[..., 4])
+        # # ---------------------------------------------------------------------- #
+        # # 将变换后的5个数合并回去，得到 shape (B, S, S, A, 5)
+        out[...,4]=c
+        return out # (B, S, S, 5, 4+1+C)
     
 def yolov2network(init_weight: bool = True) -> Yolov2Network:
     return Yolov2Network(init_weight=init_weight)

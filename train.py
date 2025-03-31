@@ -15,7 +15,7 @@ class Trainer():
         super().__init__()
         self.device='cuda' if torch.cuda.is_available() else 'cpu'
         self.IMG_SIZE=416
-        self.S=7
+        self.S=13
         self.C=20
         self.LAMBDA_COORD=5
         self.LAMBDA_NOOBJ=0.5
@@ -77,8 +77,6 @@ class Trainer():
             self.save_best_model(epoch=epoch)
 
     def compute_loss(self,batch,batch_y,batch_output):
-        batch_y=batch_y.view(self.batch_size,self.S,self.S,self.number_anchors,5+self.C)
-        batch_output=batch_output.view(self.batch_size,self.S,self.S,self.number_anchors,5+self.C)  # shape: (bs,S,S,num_a,5+C)
         # no object's grid
         noobj_mask=batch_y[...,4]==0
         noobj_loss=((batch_output[...,4][noobj_mask]-batch_y[...,4][noobj_mask])**2).sum()
@@ -102,29 +100,27 @@ class Trainer():
 
         # pred and anchor
         anchor_boxes=torch.as_tensor(self.anchor_boxes, device=batch_output.device)  # anchor boxes
-        loss_x_pred_anchor=((pred_x-torch.trunc(pred_x)-targ_x)**2).sum()
-        loss_y_pred_anchor=((pred_y-torch.trunc(pred_y)-targ_y)**2).sum()
-        loss_w_pred_anchor=(pred_w.view(-1,1)*anchor_boxes[...,0].view(1,-1)).sum()
-        loss_h_pred_anchor=(pred_h.view(-1,1)*anchor_boxes[...,1].view(1,-1)).sum()
+        loss_x_pred_anchor=((pred_x-targ_x)**2).sum()
+        loss_y_pred_anchor=((pred_y-targ_y)**2).sum()
+        loss_w_pred_anchor=((torch.exp(pred_w)*targ_w*self.IMG_SIZE-anchor_boxes[...,0].view(-1,1))**2).sum()
+        loss_h_pred_anchor=((torch.exp(pred_h)*targ_h*self.IMG_SIZE-anchor_boxes[...,1].view(-1,1))**2).sum()
         loss_p_a=loss_x_pred_anchor+loss_y_pred_anchor+loss_w_pred_anchor+loss_h_pred_anchor
-
-        # pred and target
-        loss_x_pred_targ=loss_x_pred_anchor
-        loss_y_pred_targ=loss_y_pred_anchor
-        loss_w_pred_targ=(pred_w*targ_w).sum()
-        loss_h_pred_targ=(pred_h*targ_h).sum()
-        loss_p_t=loss_x_pred_targ+loss_y_pred_targ+loss_w_pred_targ+loss_h_pred_targ
 
         # confidence loss
         # IOU
         group_size=int(len(batch_y[obj_mask][...,:4])/self.number_anchors)
+        row_col_index=obj_mask.nonzero().view(group_size,self.number_anchors,-1).squeeze(0)
         targ_group=batch_y[obj_mask][...,:4].view(group_size,self.number_anchors,-1)
         pred_group=batch_output[obj_mask][...,:4].view(group_size,self.number_anchors,-1)
-        iou=self.compute_iou(pred_group,targ_group)
+        targ_group[...,:2]+=row_col_index[...,:2]
+        pred_group[...,:2]+=row_col_index[...,:2]
+        iou=self.compute_iou(targ_group,anchor_boxes)
         max_iou,index=torch.max(iou,dim=1)
         pred_c=batch_output[obj_mask][...,4].view(group_size,-1)
         pred_best_iou_c=torch.gather(pred_c,dim=1,index=index.view(-1,1)).view(1,-1)
-        loss_c=((max_iou-pred_best_iou_c)**2).sum()
+        loss_c=((max_iou*pred_best_iou_c)**2).sum()
+
+        # pred and target
 
         # classes loss
         best_iou_index=index.unsqueeze(-1).unsqueeze(-1).expand(-1,-1,self.C)
@@ -135,63 +131,47 @@ class Trainer():
         classid_loss=((pred_classid-targ_classid)**2).sum()
 
         loss=(noobj_loss*self.LAMBDA_NOOBJ+
-              loss_p_a*2+
-              loss_p_t*self.LAMBDA_COORD+
+              loss_p_a*self.LAMBDA_COORD+
               loss_c+classid_loss
               )
         self.writer.add_scalar('batch_noobj',noobj_loss,batch)
         self.writer.add_scalar('batch_pred_anchor',loss_p_a,batch)
-        self.writer.add_scalar('batch_pred_target',loss_p_t,batch)
         self.writer.add_scalar('batch_confidence',loss_c,batch)
         self.writer.add_scalar('batch_classid',classid_loss,batch)
         return loss
 
-    def compute_iou(self,pred_group,targ_group):
-        grid_size=self.IMG_SIZE/self.S
+    def compute_iou(self,targ_group,anchor_boxes):
         # ----
-        grid_row=torch.trunc(pred_group[...,0])
-        grid_col=torch.trunc(pred_group[...,1])
+        x_targ=targ_group[...,0]*self.grid_size
+        y_targ=targ_group[...,1]*self.grid_size
+        w_targ=targ_group[...,2]*self.IMG_SIZE
+        h_targ=targ_group[...,3]*self.IMG_SIZE
 
-        x_pred=pred_group[...,0]*grid_size
-        y_pred=pred_group[...,1]*grid_size
-        w_pred=pred_group[...,2]
-        h_pred=pred_group[...,3]
-
-        x_targ=(targ_group[...,0]+grid_row)*grid_size
-        y_targ=(targ_group[...,1]+grid_col)*grid_size
-        w_targ=targ_group[...,2]
-        h_targ=targ_group[...,3]
-
-        xmin_pred=x_pred-w_pred/2
-        ymin_pred=y_pred-h_pred/2
-        xmax_pred=x_pred+w_pred/2
-        ymax_pred=y_pred+h_pred/2
+        x_anc=x_targ
+        y_anc=y_targ
+        w_anc=anchor_boxes[:,0]
+        h_anc=anchor_boxes[:,1]
 
         xmin_targ=x_targ-w_targ/2
         ymin_targ=y_targ-h_targ/2
         xmax_targ=x_targ+w_targ/2
         ymax_targ=y_targ+h_targ/2
 
+        xmin_anc=x_anc-w_anc/2
+        ymin_anc=y_anc-h_anc/2
+        xmax_anc=x_anc+w_anc/2
+        ymax_anc=y_anc+h_anc/2
+
         # IOU
-        inter_xmin=torch.max(xmin_pred,xmin_targ)
-        inter_xmax=torch.min(xmax_pred,xmax_targ)
-        inter_ymin=torch.max(ymin_pred,ymin_targ)
-        inter_ymax=torch.min(ymax_pred,ymax_targ)
+        inter_xmin=torch.max(xmin_anc,xmin_targ)
+        inter_xmax=torch.min(xmax_anc,xmax_targ)
+        inter_ymin=torch.max(ymin_anc,ymin_targ)
+        inter_ymax=torch.min(ymax_anc,ymax_targ)
 
         inter_area=(inter_xmax-inter_xmin)*(inter_ymax-inter_ymin)  # 交集
-        union_area=w_pred*h_pred+w_targ*h_targ-inter_area  # 并集
+        union_area=w_anc*h_anc+w_targ*h_targ-inter_area  # 并集
 
-        iou=inter_area/union_area
-
-        # 无相交
-        if (inter_xmax<inter_xmin).any():
-            mask=inter_xmax<inter_xmin
-            iou[mask]=0
-        if (inter_ymax<inter_ymin).any():
-            mask=inter_ymax<inter_ymin
-            iou[mask]=0
-
-        return  iou
+        return inter_area/union_area
 
     def save_best_model(self,epoch):
         if len(self.losses)==1 or self.losses[-1]<self.losses[-2]: # 保存更优的model
