@@ -9,7 +9,7 @@ import numpy as np
 from src.kmeans_manual import kmeans_manual
 
 class YoloVOCDataset(Dataset):
-    def __init__(self, IMG_SIZE=416,S=13,C=20,number_anchors=5,image_set='train'):
+    def __init__(self, IMG_SIZE=416,S=7,C=20,number_anchors=5,image_set='train'):
         super().__init__()
         # ------------------- Basic parameters -------------------
         self.IMG_SIZE=IMG_SIZE
@@ -17,7 +17,7 @@ class YoloVOCDataset(Dataset):
         self.C=C
         self.number_anchors=number_anchors
         # ------------------- Basic parameters -------------------
-        self.voc_ds=VOCDetection(root='data',year='2012',image_set='train',download=False)
+        self.voc_ds=VOCDetection(root='data',year='2012',image_set=image_set,download=False)
         classdict=set()
         self.anchor_boxes=[]
         for _,label in tqdm(self.voc_ds, desc="数据集处理中"):
@@ -38,7 +38,7 @@ class YoloVOCDataset(Dataset):
     
         x_scale=self.IMG_SIZE/img.width
         y_scale=self.IMG_SIZE/img.height
-        grid_size=self.IMG_SIZE//self.S
+        grid_size=self.IMG_SIZE/self.S
         
         scaled_img=img.resize((self.IMG_SIZE,self.IMG_SIZE))
         x=ToTensor()(scaled_img)

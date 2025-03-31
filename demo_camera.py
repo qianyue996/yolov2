@@ -19,7 +19,7 @@ model.load_state_dict(torch.load('checkpoint.pth',map_location=device)['model'])
 model.eval()
 
 if __name__=='__main__':
-    def predict(img,output,anchors,IMG_SIZE,S,C,conf_thresh=0.8,nms_thresh=0.9):
+    def predict(img,output,anchors,IMG_SIZE,S,C,conf_thresh=0.9,nms_thresh=0.5):
         boxes,conf,class_ids=decode(output,anchors,img,IMG_SIZE,S,C)
         mask=conf>=conf_thresh
         boxes=boxes[mask]
