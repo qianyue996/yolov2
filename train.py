@@ -17,8 +17,10 @@ class Trainer():
         self.IMG_SIZE=416
         self.S=13
         self.C=20
-        self.LAMBDA_COORD=5
-        self.LAMBDA_NOOBJ=0.5
+        self.LAMBDA_COORD=1
+        self.LAMBDA_OBJ=5
+        self.LAMBDA_NOOBJ=1
+        self.LAMBDA_ANCB=0.01
         self.lr=3e-5
         self.batch_size=2
         self.start_epoch=0
@@ -39,10 +41,10 @@ class Trainer():
         self.optimizer=optim.Adam([param for param in self.model.parameters() if param.requires_grad],lr=self.lr)
 
         # 尝试从上次训练结束点开始
-        try:
-            self.checkpoint=torch.load('checkpoint.pth')
-        except Exception as e:
-            pass
+        # try:
+        #     self.checkpoint=torch.load('checkpoint.pth')
+        # except Exception as e:
+        #     pass
         if self.checkpoint:
             self.model.load_state_dict(self.checkpoint['model'])
             self.optimizer.load_state_dict(self.checkpoint['optimizer'])
@@ -59,10 +61,9 @@ class Trainer():
             with tqdm(self.dataloader, disable=False) as bar:
                 for batch,item in enumerate(bar):
                     batch_x,batch_y=item
-                    loss=torch.tensor(0)
                     batch_x,batch_y=batch_x.to(self.device),batch_y.to(self.device)
                     batch_output=self.model(batch_x)
-                    loss=self.compute_loss(batch,batch_y,batch_output)
+                    loss=self.compute_loss(batch,batch_output,batch_y)
                     loss=loss/len(batch_x)
                     self.optimizer.zero_grad()
                     loss.backward()
@@ -70,24 +71,29 @@ class Trainer():
                     batch_avg_loss+=loss.item()
                     bar.set_postfix({'epoch':epoch,
                                      'bs_avg_loss:':loss.item()})
-            batch_avg_loss=batch_avg_loss/len(self.dataloader)
-            tqdm.write(f"本epoch平均损失为: {batch_avg_loss}")
-            self.writer.add_scalar('epoch_loss',batch_avg_loss,epoch)
+            epoch_avg_loss=batch_avg_loss/len(self.dataloader)
+            tqdm.write(f"本epoch平均损失为: {epoch_avg_loss}")
+            self.writer.add_scalar('epoch_loss',epoch_avg_loss,epoch)
             self.losses.append(batch_avg_loss)
             self.save_best_model(epoch=epoch)
 
-    def compute_loss(self,batch,batch_y,batch_output):
-        batch_output[...,0]=torch.sigmoid(batch_output[...,0])
-        batch_output[...,1]=torch.sigmoid(batch_output[...,1])
-        batch_output[...,4]=torch.sigmoid(batch_output[...,4])
+    def compute_loss(self,batch,batch_output,batch_y,thresh=0.6,step=0):
+        loss=torch.tensor(0)
+        # share params
+        anchor_boxes=torch.as_tensor(self.anchor_boxes, device=batch_output.device)  # anchor boxes
+        # IOU
+        iou=self.compute_iou(batch_y,anchor_boxes)
+        noobj_mask=iou<=thresh
+        obj_mask=iou>thresh
+
         # no object's grid
-        noobj_mask=batch_y[...,4]==0
-        noobj_loss=((batch_output[...,4][noobj_mask]-batch_y[...,4][noobj_mask])**2).sum()
+        # noobj_mask=batch_y[...,4]==0
+        noobj_loss=((batch_output[noobj_mask][...,4]-batch_y[noobj_mask][...,4])**2).sum()
 
         # has object's grid
         # for each grid have five anchor boxes
         # loss=pred and anchor boxes position loss, pred and target position loss, classes loss, confidence loss
-        obj_mask=batch_y[...,4]==1
+        # obj_mask=batch_y[...,4]==1
         # batch_output[obj_mask]
         # batch_y[obj_mask]
 
@@ -101,54 +107,57 @@ class Trainer():
         targ_w=batch_y[obj_mask][...,2]       # targ w
         targ_h=batch_y[obj_mask][...,3]       # targ h
 
-        # pred and anchor
-        anchor_boxes=torch.as_tensor(self.anchor_boxes, device=batch_output.device)  # anchor boxes
-        loss_x_pred_anchor=((pred_x-targ_x)**2).sum()
-        loss_y_pred_anchor=((pred_y-targ_y)**2).sum()
-        loss_w_pred_anchor=((torch.exp(pred_w)*targ_w*self.IMG_SIZE-anchor_boxes[...,0].view(-1,1))**2).sum()
-        loss_h_pred_anchor=((torch.exp(pred_h)*targ_h*self.IMG_SIZE-anchor_boxes[...,1].view(-1,1))**2).sum()
-        loss_p_a=loss_x_pred_anchor+loss_y_pred_anchor+loss_w_pred_anchor+loss_h_pred_anchor
+        step+=batch
+        if step<=12800:
+            # pred and anchor
+            loss_x_pred_anchor=((pred_x-targ_x)**2).sum()
+            loss_y_pred_anchor=((pred_y-targ_y)**2).sum()
+            loss_w_pred_anchor=((pred_w-anchor_boxes[...,0].view(-1,1))**2).sum()
+            loss_h_pred_anchor=((pred_h-anchor_boxes[...,1].view(-1,1))**2).sum()
+            loss=loss+(loss_x_pred_anchor+loss_y_pred_anchor+loss_w_pred_anchor+loss_h_pred_anchor)*self.LAMBDA_ANCB
+
+        # pred and target
+        loss_x_pred_targ=((pred_x-targ_x)**2).sum()
+        loss_y_pred_targ=((pred_y-targ_y)**2).sum()
+        loss_w_pred_targ=((pred_w-targ_w)**2).sum()
+        loss_h_pred_targ=((pred_h-targ_h)**2).sum()
+        loss_p_t=loss_x_pred_targ+loss_y_pred_targ+loss_w_pred_targ+loss_h_pred_targ
 
         # confidence loss
-        # IOU
-        group_size=int(len(batch_y[obj_mask][...,:4])/self.number_anchors)
-        row_col_index=obj_mask.nonzero().view(group_size,self.number_anchors,-1).squeeze(0)
-        targ_group=batch_y[obj_mask][...,:4].view(group_size,self.number_anchors,-1)
-        pred_group=batch_output[obj_mask][...,:4].view(group_size,self.number_anchors,-1)
-        targ_group[...,:2]+=row_col_index[...,:2]
-        pred_group[...,:2]+=row_col_index[...,:2]
-        iou=self.compute_iou(targ_group,anchor_boxes)
-        max_iou,index=torch.max(iou,dim=1)
-        pred_c=batch_output[obj_mask][...,4].view(group_size,-1)
-        pred_best_iou_c=torch.gather(pred_c,dim=1,index=index.view(-1,1)).view(1,-1)
-        loss_c=((max_iou*pred_best_iou_c)**2).sum()
+        # group_size=int(len(batch_y[obj_mask][...,:4])/self.number_anchors)
+        # row_col_index=obj_mask.nonzero().view(group_size,self.number_anchors,-1).squeeze(0)
+        # targ_group=batch_y[obj_mask][...,:4].view(group_size,self.number_anchors,-1)
+        # pred_group=batch_output[obj_mask][...,:4].view(group_size,self.number_anchors,-1)
+        # targ_group[...,:2]+=row_col_index[...,:2]
+        # pred_group[...,:2]+=row_col_index[...,:2]
+        # iou=self.compute_iou(targ_group,anchor_boxes)
+        # max_iou,index=torch.max(iou,dim=1)
+        pred_c=batch_output[obj_mask][...,4]
+        loss_c=((iou[obj_mask]*pred_c)**2).sum()
 
         # pred and target
 
         # classes loss
-        best_iou_index=index.unsqueeze(-1).unsqueeze(-1).expand(-1,-1,self.C)
-        pred_classid=batch_output[obj_mask][...,5:].view(group_size,self.number_anchors,-1)
-        targ_classid=batch_y[obj_mask][...,5:].view(group_size,self.number_anchors,-1)
-        pred_classid=torch.gather(pred_classid,dim=1,index=best_iou_index).squeeze(1)
-        targ_classid=torch.gather(targ_classid,dim=1,index=best_iou_index).squeeze(1)
+        pred_classid=batch_output[obj_mask][...,5:]
+        targ_classid=batch_y[obj_mask][...,5:]
         classid_loss=((pred_classid-targ_classid)**2).sum()
 
         loss=(noobj_loss*self.LAMBDA_NOOBJ+
-              loss_p_a*self.LAMBDA_COORD+
-              loss_c+classid_loss
-              )
-        self.writer.add_scalar('batch_noobj',noobj_loss,batch)
-        self.writer.add_scalar('batch_pred_anchor',loss_p_a,batch)
-        self.writer.add_scalar('batch_confidence',loss_c,batch)
-        self.writer.add_scalar('batch_classid',classid_loss,batch)
+              loss_p_t*self.LAMBDA_COORD+
+              loss_c*self.LAMBDA_COORD+
+              classid_loss)
+        self.writer.add_scalar('batch_noobj',noobj_loss*self.LAMBDA_NOOBJ/self.batch_size,batch)
+        self.writer.add_scalar('batch_xywh_loss',loss_p_t*self.LAMBDA_COORD/self.batch_size,batch)
+        self.writer.add_scalar('batch_confidence',loss_c*self.LAMBDA_COORD/self.batch_size,batch)
+        self.writer.add_scalar('batch_classid',classid_loss/self.batch_size,batch)
         return loss
 
-    def compute_iou(self,targ_group,anchor_boxes):
+    def compute_iou(self,batch_y,anchor_boxes):
         # ----
-        x_targ=targ_group[...,0]*self.grid_size
-        y_targ=targ_group[...,1]*self.grid_size
-        w_targ=targ_group[...,2]*self.IMG_SIZE
-        h_targ=targ_group[...,3]*self.IMG_SIZE
+        x_targ=batch_y[...,0]*self.grid_size
+        y_targ=batch_y[...,1]*self.grid_size
+        w_targ=batch_y[...,2]
+        h_targ=batch_y[...,3]
 
         x_anc=x_targ
         y_anc=y_targ
