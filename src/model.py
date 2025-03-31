@@ -56,7 +56,7 @@ class Yolov2Network(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.backbone(x)
         out = self.head(x)
-        out=out.view(len(x), self.S, self.S, self.num_anchors, 5 + self.C)
+        out = out.view(len(x), self.S, self.S, self.num_anchors, 5 + self.C)
         # pred = out[..., :5]
         # grid_x = torch.arange(self.S, device=out.device).view(1, self.S, 1, 1)  # 对应 row（X）
         # grid_y = torch.arange(self.S, device=out.device).view(1, 1, self.S, 1)  # 对应 col（Y）
@@ -70,8 +70,9 @@ class Yolov2Network(nn.Module):
         # c = torch.sigmoid(out[..., 4])
         # # ---------------------------------------------------------------------- #
         # # 将变换后的5个数合并回去，得到 shape (B, S, S, A, 5)
-        # out[...,4]=c
-        return out # (B, S, S, 5, 4+1+C)
+        # transformed = torch.stack([x, y, w, h, c], dim=-1)
+        # out[..., :5] = transformed
+        return out  # (B, S, S, 5, 4+1+C)
     
 def yolov2network(init_weight: bool = True) -> Yolov2Network:
     return Yolov2Network(init_weight=init_weight)
