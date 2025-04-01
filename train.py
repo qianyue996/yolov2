@@ -21,7 +21,7 @@ class Trainer():
         self.LAMBDA_OBJ=5
         self.LAMBDA_NOOBJ=1
         self.LAMBDA_ANCB=0.01
-        self.lr=3e-5
+        self.lr=0.001
         self.batch_size=2
         self.start_epoch=0
         self.epochs=300

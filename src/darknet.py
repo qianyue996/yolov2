@@ -55,7 +55,7 @@ class Detection(nn.Module):
         feature = self.passthrough(feature)
         feature = feature.reshape((-1, channel*4, h//2, w//2))
         x = torch.cat((x,feature),dim=1)
-        x = Conv_BN_LeakyReLU(x.shape[1],1024)(x)
+        x = Conv_BN_LeakyReLU(x.shape[1],1024).to(x.device)(x)
         x = self.pred(x)
         return x
 
