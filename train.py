@@ -8,7 +8,7 @@ import sys
 from tqdm import tqdm
 
 from src.dataset import YoloVOCDataset
-from src.model import Yolov2Network
+from src.darknet import YOLOv2
 
 class Trainer():
     def __init__(self):
@@ -28,16 +28,17 @@ class Trainer():
         self.number_anchors=5
 
         self.grid_size=self.IMG_SIZE/self.S
+        self.step=0
         self.losses=[]
         self.checkpoint=None
 
     def setup(self):
         # 加载数据集
-        ds=YoloVOCDataset(self.IMG_SIZE,self.S,self.C,self.number_anchors)
+        ds=YoloVOCDataset()
         self.dataloader=DataLoader(ds,batch_size=self.batch_size,shuffle=True)
         self.anchor_boxes=ds.anchor_boxes
         # 模型初始化
-        self.model=Yolov2Network(self.S,self.C,self.anchor_boxes).to(self.device)
+        self.model=YOLOv2().to(self.device)
         self.optimizer=optim.Adam([param for param in self.model.parameters() if param.requires_grad],lr=self.lr)
 
         # 尝试从上次训练结束点开始
@@ -77,10 +78,10 @@ class Trainer():
             self.losses.append(batch_avg_loss)
             self.save_best_model(epoch=epoch)
 
-    def compute_loss(self,batch,batch_output,batch_y,thresh=0.6,step=0):
+    def compute_loss(self,batch,batch_output,batch_y,thresh=0.6):
         loss=torch.tensor(0)
         # share params
-        anchor_boxes=torch.as_tensor(self.anchor_boxes, device=batch_output.device)  # anchor boxes
+        anchor_boxes=torch.as_tensor(self.anchor_boxes,device=batch_output.device)  # anchor boxes
         batch_output[...,0]=torch.sigmoid(batch_output[...,0])
         batch_output[...,1]=torch.sigmoid(batch_output[...,1])
         batch_output[...,2]=torch.exp(batch_output[...,2])*anchor_boxes[:,0].view(1,1,1,-1)
@@ -104,34 +105,34 @@ class Trainer():
         # batch_y[obj_mask]
 
         # share params
-        pred_x=batch_output[obj_mask][...,0]  # pred x
-        pred_y=batch_output[obj_mask][...,1]  # pred y
-        pred_w=batch_output[obj_mask][...,2]  # pred w
-        pred_h=batch_output[obj_mask][...,3]  # pred h
+        pred_x=batch_output[obj_mask][...,0] # pred x
+        pred_y=batch_output[obj_mask][...,1] # pred y
+        pred_w=batch_output[obj_mask][...,2] / self.IMG_SIZE # pred w
+        pred_h=batch_output[obj_mask][...,3] / self.IMG_SIZE # pred h
         targ_x=batch_y[obj_mask][...,0]       # targ x
         targ_y=batch_y[obj_mask][...,1]       # targ y
         targ_w=batch_y[obj_mask][...,2]       # targ w
         targ_h=batch_y[obj_mask][...,3]       # targ h
 
-        step+=batch
-        if step<=12800:
+        self.step+=batch
+        if self.step<=12800:
             # pred and anchor
-            loss_x_pred_anchor=((pred_x-targ_x)**2).sum()
-            loss_y_pred_anchor=((pred_y-targ_y)**2).sum()
-            loss_w_pred_anchor=((pred_w-anchor_boxes[...,0].view(-1,1))**2).sum()
-            loss_h_pred_anchor=((pred_h-anchor_boxes[...,1].view(-1,1))**2).sum()
-            loss=loss+(loss_x_pred_anchor+loss_y_pred_anchor+loss_w_pred_anchor+loss_h_pred_anchor)*self.LAMBDA_ANCB
+            loss_pred_anchor_x=((pred_x-targ_x)**2).sum()
+            loss_pred_anchor_y=((pred_y-targ_y)**2).sum()
+            loss_pred_anchor_w=((pred_w-anchor_boxes[...,0].view(-1,1) / self.IMG_SIZE)**2).sum()
+            loss_pred_anchor_h=((pred_h-anchor_boxes[...,1].view(-1,1) / self.IMG_SIZE)**2).sum()
+            loss=loss+(loss_pred_anchor_x+loss_pred_anchor_y+loss_pred_anchor_w+loss_pred_anchor_h)*self.LAMBDA_ANCB
 
         # pred and target
-        loss_x_pred_targ=((pred_x-targ_x)**2).sum()
-        loss_y_pred_targ=((pred_y-targ_y)**2).sum()
-        loss_w_pred_targ=((pred_w-targ_w)**2).sum()
-        loss_h_pred_targ=((pred_h-targ_h)**2).sum()
-        loss_p_t=loss_x_pred_targ+loss_y_pred_targ+loss_w_pred_targ+loss_h_pred_targ
+        loss_pred_targ_x=((pred_x-targ_x)**2).sum()
+        loss_pred_targ_y=((pred_y-targ_y)**2).sum()
+        loss_pred_targ_w=((pred_w-targ_w)**2).sum()
+        loss_pred_targ_h=((pred_h-targ_h)**2).sum()
+        loss_p_t=loss_pred_targ_x+loss_pred_targ_y+loss_pred_targ_w+loss_pred_targ_h
 
         # confidence loss
         pred_c=batch_output[obj_mask][...,4]
-        loss_c=((iou[obj_mask]*pred_c)**2).sum()
+        loss_c=(iou[obj_mask]-pred_c).sum()
 
         # pred and target
 
@@ -153,22 +154,16 @@ class Trainer():
     def compute_iou(self,batch_y,anchor_boxes):
         iou = torch.zeros_like(batch_y[..., 4])
         
-        # 获取目标框存在的掩码
-        mask = batch_y[...,0,4] > 0  # shape: (batch, S, S)
+        mask = batch_y[...,4] > 0
         
-        if not mask.any():
-            return iou
+        batch_indices, row_indices, col_indices, anc_indices = torch.where(mask)
         
-        batch_indices, row_indices, col_indices = torch.where(mask)
-        
-        # 目标框参数 (B, S, S, 5, 4)
         x_targ = (batch_y[batch_indices, row_indices, col_indices, :, 0] + row_indices[:, None]) * self.grid_size
         y_targ = (batch_y[batch_indices, row_indices, col_indices, :, 1] + col_indices[:, None]) * self.grid_size
         w_targ = batch_y[batch_indices, row_indices, col_indices, :, 2] * self.IMG_SIZE
         h_targ = batch_y[batch_indices, row_indices, col_indices, :, 3] * self.IMG_SIZE
         
-        # anchor 框参数 (1, 5, 2)
-        anchor_boxes = anchor_boxes.to(batch_y.device)  # 确保 device 一致
+        anchor_boxes = anchor_boxes.to(batch_y.device)
         w_anc, h_anc = anchor_boxes[:, 0], anchor_boxes[:, 1]
         
         # 计算目标框的 xmin, ymin, xmax, ymax

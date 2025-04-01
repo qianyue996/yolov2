@@ -6,18 +6,18 @@ from tqdm import tqdm
 from torch.utils.data.dataloader import DataLoader
 import numpy as np
 
-from src.kmeans_manual import kmeans_manual
+from src.yolo_kmeans import k_means
 
 class YoloVOCDataset(Dataset):
-    def __init__(self, IMG_SIZE=416,S=7,C=20,number_anchors=5,image_set='train'):
+    def __init__(self):
         super().__init__()
         # ------------------- Basic parameters -------------------
-        self.IMG_SIZE=IMG_SIZE
-        self.S=S
-        self.C=C
-        self.number_anchors=number_anchors
+        self.IMG_SIZE=416
+        self.S=13
+        self.C=20
+        self.number_anchors=5
         # ------------------- Basic parameters -------------------
-        self.voc_ds=VOCDetection(root='data',year='2012',image_set=image_set,download=False)
+        self.voc_ds=VOCDetection(root='data',year='2012',image_set='train',download=False)
         classdict=set()
         self.anchor_boxes=[]
         for _,label in tqdm(self.voc_ds, desc="数据集处理中"):
@@ -29,7 +29,7 @@ class YoloVOCDataset(Dataset):
                 h=ymax-ymin
                 self.anchor_boxes.append([w,h])
                 names=sorted(list(classdict))
-        self.anchor_boxes=kmeans_manual(np.array(self.anchor_boxes),self.number_anchors).tolist()
+        self.anchor_boxes=k_means(np.array(self.anchor_boxes),self.number_anchors).tolist()
         self.id2name={i:c for i,c in enumerate(names)}
         self.name2id={c:i for i,c in self.id2name.items()}
     
