@@ -130,14 +130,6 @@ class Trainer():
         loss_p_t=loss_x_pred_targ+loss_y_pred_targ+loss_w_pred_targ+loss_h_pred_targ
 
         # confidence loss
-        # group_size=int(len(batch_y[obj_mask][...,:4])/self.number_anchors)
-        # row_col_index=obj_mask.nonzero().view(group_size,self.number_anchors,-1).squeeze(0)
-        # targ_group=batch_y[obj_mask][...,:4].view(group_size,self.number_anchors,-1)
-        # pred_group=batch_output[obj_mask][...,:4].view(group_size,self.number_anchors,-1)
-        # targ_group[...,:2]+=row_col_index[...,:2]
-        # pred_group[...,:2]+=row_col_index[...,:2]
-        # iou=self.compute_iou(targ_group,anchor_boxes)
-        # max_iou,index=torch.max(iou,dim=1)
         pred_c=batch_output[obj_mask][...,4]
         loss_c=((iou[obj_mask]*pred_c)**2).sum()
 
@@ -151,11 +143,11 @@ class Trainer():
         loss=(noobj_loss*self.LAMBDA_NOOBJ+
               loss_p_t*self.LAMBDA_COORD+
               loss_c*self.LAMBDA_OBJ+
-              classid_loss)
+              classid_loss*self.LAMBDA_OBJ)
         self.writer.add_scalar('batch_noobj',noobj_loss*self.LAMBDA_NOOBJ/self.batch_size,batch)
         self.writer.add_scalar('batch_xywh_loss',loss_p_t*self.LAMBDA_COORD/self.batch_size,batch)
         self.writer.add_scalar('batch_confidence',loss_c*self.LAMBDA_COORD/self.batch_size,batch)
-        self.writer.add_scalar('batch_classid',classid_loss/self.batch_size,batch)
+        self.writer.add_scalar('batch_classid',classid_loss*self.LAMBDA_OBJ/self.batch_size,batch)
         return loss
 
     def compute_iou(self,batch_y,anchor_boxes):
@@ -211,49 +203,6 @@ class Trainer():
         iou[batch_indices, row_indices, col_indices, best_anchor_indices] = best_ious
         
         return iou
-
-
-        # iou=torch.zeros_like(batch_y)
-        # mask=batch_y[...,4]==1
-        # index=mask.nonzero()
-        # # ---
-        # grid_x = torch.arange(self.S, device=batch_y.device).view(1, self.S, 1, 1)
-        # grid_y = torch.arange(self.S, device=batch_y.device).view(1, 1, self.S, 1)
-        # batch_y[...,0]=batch_y[...,0]+grid_x
-        # batch_y[...,1]=batch_y[...,1]+grid_y
-        # # ----
-        # x_targ=(batch_y[mask][...,0]*self.grid_size).view(-1,self.number_anchors)
-        # y_targ=(batch_y[mask][...,1]*self.grid_size).view(-1,self.number_anchors)
-        # w_targ=(batch_y[mask][...,2]*self.IMG_SIZE).view(-1,self.number_anchors)
-        # h_targ=(batch_y[mask][...,3]*self.IMG_SIZE).view(-1,self.number_anchors)
-
-        # x_anc=x_targ
-        # y_anc=y_targ
-        # w_anc=anchor_boxes[:,0]
-        # h_anc=anchor_boxes[:,1]
-
-        # xmin_targ=x_targ-w_targ/2
-        # ymin_targ=y_targ-h_targ/2
-        # xmax_targ=x_targ+w_targ/2
-        # ymax_targ=y_targ+h_targ/2
-
-        # xmin_anc=x_anc-w_anc/2
-        # ymin_anc=y_anc-h_anc/2
-        # xmax_anc=x_anc+w_anc/2
-        # ymax_anc=y_anc+h_anc/2
-
-        # # IOU
-        # inter_xmin=torch.max(xmin_anc,xmin_targ)
-        # inter_xmax=torch.min(xmax_anc,xmax_targ)
-        # inter_ymin=torch.max(ymin_anc,ymin_targ)
-        # inter_ymax=torch.min(ymax_anc,ymax_targ)
-
-        # inter_area=(inter_xmax-inter_xmin)*(inter_ymax-inter_ymin)  # 交集
-        # union_area=w_anc*h_anc+w_targ*h_targ-inter_area  # 并集
-
-        # if (inter_xmax<inter_xmin).any()
-
-        # return inter_area/union_area
 
     def save_best_model(self,epoch):
         if len(self.losses)==1 or self.losses[-1]<self.losses[-2]: # 保存更优的model
