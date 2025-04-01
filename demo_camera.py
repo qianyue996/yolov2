@@ -2,7 +2,7 @@ import cv2 as cv
 import torch
 from torchvision.transforms import ToTensor
 
-from src.model import Yolov2
+from src.model import Yolov2Network
 from src.dataset import YoloVOCDataset
 
 device='cuda' if torch.cuda.is_available() else 'cpu'
@@ -14,12 +14,12 @@ C=20
 ds=YoloVOCDataset()
 anchors=ds.anchor_boxes
 
-model=Yolov2(S,C,anchors).to(device)
+model=Yolov2Network(S,C,anchors).to(device)
 model.load_state_dict(torch.load('checkpoint.pth',map_location=device)['model'])
 model.eval()
 
 if __name__=='__main__':
-    def predict(img,output,anchors,IMG_SIZE,S,C,conf_thresh=0.9,nms_thresh=0.5):
+    def predict(img,output,anchors,IMG_SIZE,S,C,conf_thresh=0.95,nms_thresh=0.9):
         boxes,conf,class_ids=decode(output,anchors,img,IMG_SIZE,S,C)
         mask=conf>=conf_thresh
         boxes=boxes[mask]

@@ -56,10 +56,10 @@ class YoloVOCDataset(Dataset):
             
             # yolo coordinates
             xcenter,ycenter=xcenter%grid_size/grid_size,ycenter%grid_size/grid_size
-            width,height=width*x_scale,height*y_scale
+            width,height=width/self.IMG_SIZE,height/self.IMG_SIZE
             
             # targets
-            y[grid_i,grid_j,:,:5]=torch.as_tensor([xcenter+grid_i,ycenter+grid_j,width,height,1])  # x,y,w,h,c
+            y[grid_i,grid_j,:,:5]=torch.as_tensor([xcenter,ycenter,width,height,1])  # x,y,w,h,c
             y[grid_i,grid_j,:,4]=1
             y[grid_i,grid_j,:,5+classid]=1
         return x,y # ((3,416,416),(13,13,5,25))

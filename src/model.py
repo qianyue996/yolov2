@@ -57,21 +57,21 @@ class Yolov2Network(nn.Module):
         x = self.backbone(x)
         out = self.head(x)
         out = out.view(len(x), self.S, self.S, self.num_anchors, 5 + self.C)
-        pred = out[..., :5]
-        grid_x = torch.arange(self.S, device=out.device).view(1, self.S, 1, 1)  # 对应 row（X）
-        grid_y = torch.arange(self.S, device=out.device).view(1, 1, self.S, 1)  # 对应 col（Y）
-        # # ---------------------------------------------------------------------- #
-        x = torch.sigmoid(pred[..., 0]) + grid_x
-        y = torch.sigmoid(pred[..., 1]) + grid_y
-        anchor_w = self.anchors[:, 0].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
-        anchor_h = self.anchors[:, 1].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
-        w = torch.exp(pred[..., 2]) * anchor_w
-        h = torch.exp(pred[..., 3]) * anchor_h
-        c = torch.sigmoid(out[..., 4])
-        # # ---------------------------------------------------------------------- #
-        # # 将变换后的5个数合并回去，得到 shape (B, S, S, A, 5)
-        transformed = torch.stack([x, y, w, h, c], dim=-1)
-        out[..., :5] = transformed
+        # pred = out[..., :5]
+        # grid_x = torch.arange(self.S, device=out.device).view(1, self.S, 1, 1)  # 对应 row（X）
+        # grid_y = torch.arange(self.S, device=out.device).view(1, 1, self.S, 1)  # 对应 col（Y）
+        # ---------------------------------------------------------------------- #
+        # x = torch.sigmoid(pred[..., 0]) + grid_x
+        # y = torch.sigmoid(pred[..., 1]) + grid_y
+        # anchor_w = self.anchors[:, 0].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
+        # anchor_h = self.anchors[:, 1].view(1, 1, 1, self.num_anchors)  # shape: (1,1,1,A)
+        # w = torch.exp(pred[..., 2]) * anchor_w
+        # h = torch.exp(pred[..., 3]) * anchor_h
+        # c = torch.sigmoid(out[..., 4])
+        # ---------------------------------------------------------------------- #
+        # 将变换后的5个数合并回去，得到 shape (B, S, S, A, 5)
+        # transformed = torch.stack([x, y, w, h, c], dim=-1)
+        # out[..., :5] = transformed
         return out  # (B, S, S, 5, 4+1+C)
     
 def yolov2network(init_weight: bool = True) -> Yolov2Network:
