@@ -159,51 +159,59 @@ class Trainer():
         return loss
 
     def compute_iou(self,batch_y,anchor_boxes):
-        iou=torch.zeros_like(batch_y[...,4])
-        for batch in range(self.batch_size):
-            for row in range(self.S):
-                for col in range(self.S):
-                    if batch_y[batch,row,col,0,4]==0: # col,0: 0指的是5个anchor中因为都是一样的，取0-4都可以
-                        continue
-                    batch_iou=torch.zeros((5),device=batch_y.device)
-                    for anchor in range(self.number_anchors):
-                        x_targ=(batch_y[batch,row,col,anchor,0]+row)*self.grid_size
-                        y_targ=(batch_y[batch,row,col,anchor,1]+col)*self.grid_size
-                        w_targ=batch_y[batch,row,col,anchor,2]*self.IMG_SIZE
-                        h_targ=batch_y[batch,row,col,anchor,3]*self.IMG_SIZE
-
-                        x_anc=x_targ
-                        y_anc=y_targ
-                        w_anc=anchor_boxes[anchor][0]
-                        h_anc=anchor_boxes[anchor][1]
-
-                        xmin_targ=x_targ-w_targ/2
-                        ymin_targ=y_targ-h_targ/2
-                        xmax_targ=x_targ+w_targ/2
-                        ymax_targ=y_targ+h_targ/2
-
-                        xmin_anc=x_anc-w_anc/2
-                        ymin_anc=y_anc-h_anc/2
-                        xmax_anc=x_anc+w_anc/2
-                        ymax_anc=y_anc+h_anc/2
-
-                        # IOU
-                        inter_xmin=torch.max(xmin_anc,xmin_targ)
-                        inter_xmax=torch.min(xmax_anc,xmax_targ)
-                        inter_ymin=torch.max(ymin_anc,ymin_targ)
-                        inter_ymax=torch.min(ymax_anc,ymax_targ)
-
-                        if inter_xmax<inter_xmin or inter_ymax<inter_ymin:
-                            continue
-                        
-                        inter_area=(inter_xmax-inter_xmin)*(inter_ymax-inter_ymin)  # 交集
-                        union_area=w_anc*h_anc+w_targ*h_targ-inter_area  # 并集
-
-                        batch_iou[anchor]=inter_area/union_area
-                    batch_iou_index=batch_iou.argmax()
-                    iou[batch,row,col,batch_iou_index]=batch_iou.max()
-
+        iou = torch.zeros_like(batch_y[..., 4])
+        
+        # 获取目标框存在的掩码
+        mask = batch_y[...,0,4] > 0  # shape: (batch, S, S)
+        
+        if not mask.any():
+            return iou
+        
+        batch_indices, row_indices, col_indices = torch.where(mask)
+        
+        # 目标框参数 (B, S, S, 5, 4)
+        x_targ = (batch_y[batch_indices, row_indices, col_indices, :, 0] + row_indices[:, None]) * self.grid_size
+        y_targ = (batch_y[batch_indices, row_indices, col_indices, :, 1] + col_indices[:, None]) * self.grid_size
+        w_targ = batch_y[batch_indices, row_indices, col_indices, :, 2] * self.IMG_SIZE
+        h_targ = batch_y[batch_indices, row_indices, col_indices, :, 3] * self.IMG_SIZE
+        
+        # anchor 框参数 (1, 5, 2)
+        anchor_boxes = anchor_boxes.to(batch_y.device)  # 确保 device 一致
+        w_anc, h_anc = anchor_boxes[:, 0], anchor_boxes[:, 1]
+        
+        # 计算目标框的 xmin, ymin, xmax, ymax
+        xmin_targ, ymin_targ = x_targ - w_targ / 2, y_targ - h_targ / 2
+        xmax_targ, ymax_targ = x_targ + w_targ / 2, y_targ + h_targ / 2
+        
+        # 计算 anchor 框的 xmin, ymin, xmax, ymax（anchor 框中心与目标框相同）
+        xmin_anc, ymin_anc = x_targ - w_anc / 2, y_targ - h_anc / 2
+        xmax_anc, ymax_anc = x_targ + w_anc / 2, y_targ + h_anc / 2
+        
+        # 计算交集区域 (B, S, S, 5)
+        inter_xmin = torch.max(xmin_targ, xmin_anc)
+        inter_ymin = torch.max(ymin_targ, ymin_anc)
+        inter_xmax = torch.min(xmax_targ, xmax_anc)
+        inter_ymax = torch.min(ymax_targ, ymax_anc)
+        
+        inter_w = (inter_xmax - inter_xmin).clamp(0)
+        inter_h = (inter_ymax - inter_ymin).clamp(0)
+        inter_area = inter_w * inter_h
+        
+        # 计算并集区域
+        union_area = (w_anc * h_anc) + (w_targ * h_targ) - inter_area
+        
+        # 计算 IoU
+        iou_values = inter_area / union_area
+        
+        # 选择最大 IoU 对应的 anchor 索引
+        best_anchor_indices = iou_values.argmax(dim=-1)
+        best_ious = iou_values.max(dim=-1).values
+        
+        # 将计算出的 IoU 填充回结果张量
+        iou[batch_indices, row_indices, col_indices, best_anchor_indices] = best_ious
+        
         return iou
+
 
         # iou=torch.zeros_like(batch_y)
         # mask=batch_y[...,4]==1
